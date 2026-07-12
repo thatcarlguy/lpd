@@ -1,0 +1,122 @@
+Current Pinout:
+  PA0
+  PA1
+  PA2
+  PA3
+  PA4 - Counter (can't use)
+  PA5 - LSR Sense
+  PA6
+  PA7 - Interlock
+  PB0
+  PB1
+  PB2 - Board Temp
+  PB3
+  
+Revised Pinout:
+  PA0 - UPDI        Programming
+  PA1 - SPI/MOSI    RS485 output, Analog output control
+  PA2 - SPI/MISO    RS485 output, Analog output control
+  PA3 - SPI/SCK     RS485 output, Analog output control
+  PA4 - AIN6        Analog input for laser PD feedback
+  PA5 - TCB0        Counter
+  PA6 - DOUT        Digital output for laser power control
+  PA7 - AIN7        Analog input for board temperature
+  PB0 - DOUT        Digital output for Analog output select, active low, disabled high
+  PB1 - DOUT        Digital output for Digital output select, send high recieve low
+  PB2 - DIN         Digital input for interlock
+  PB3 - DOUT        Digital output for status LED
+  
+  
+Checkout:
+  PA1 - 02_rs485, 
+  PA2 - 02_rs485, 
+  PA3 - 02_rs485, 
+  PA4 - 
+  PA5 - 
+  PA6 - 
+  PA7 - 
+  PB0 - 02_rs485, 
+  PB1 - 02_rs485, 
+  PB2 - 
+  PB3 - 01_blink
+
+  
+
+
+
+for the interlock, use rising/falling edge of async interrupt (only on PB2, PA2, PA6) to turn off laser, switch light, and change digital output
+when interrupt is tripped, put a square wave for calibration confirmation on the voltage output.
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+// Define which pin is used
+#define INTERRUPT_PIN PIN2_bm
+
+void setup() {
+    // 1. Configure the pin: Pull-up enabled + Falling edge sensing
+    // Note: Px2 and Px6 have full asynchronous detection capability
+    PORTA.PIN2CTRL = PORT_PULLUPEN_bm | PORT_ISC_FALLING_gc;
+    
+    // (Optional) Configure an output pin to see the result (e.g., PA3)
+    PORTA.DIRSET = PIN3_bm;
+
+    // 2. Enable global interrupts
+    sei();
+}
+
+// Common Interrupt Service Routine (ISR) for all pins on PORTA
+ISR(PORTA_PORT_vect) {
+    // Check if the interrupt was triggered by PA2
+    if (PORTA.INTFLAGS & INTERRUPT_PIN) {
+        
+        // Toggle an LED on PA3 to indicate the interrupt occurred
+        PORTA.OUTTGL = PIN3_bm;
+
+        // Clear the interrupt flag by writing a 1 back to that specific flag bit!
+        PORTA.INTFLAGS = INTERRUPT_PIN;
+    }
+}
+
+
+
+
+
+
+
+for the counter, when it overflows it throws an interrupt, which is used to increment a decade counter for total number of counts
+
+total counts = decade * 65535 + current_counter_value
+
+
+
+
+Using Arduino IDE for Programming:
+  https://github.com/SpenceKonde/megaTinyCore/issues/1059#issuecomment-1950286469
+  https://forum.arduino.cc/t/programming-an-attiny1604/1202671/11
+  
+Examples
+  https://www.google.com/search?q=use+attiny+counter+with+arduino+ide&rlz=1C1HKFL_enUS1191US1191&oq=use+attiny+counter&gs_lcrp=EgZjaHJvbWUqBwgBECEYoAEyBggAEEUYOTIHCAEQIRigATIHCAIQIRigATIHCAMQIRiPAjIHCAQQIRiPAtIBCDQzNDRqMGo0qAIAsAIB&sourceid=chrome&ie=UTF-8
+  https://www.google.com/search?q=attiny+counter+program+examples&sca_esv=3dd1c5d9088397af&rlz=1C1HKFL_enUS1191US1191&sxsrf=APpeQnvHDShTmTs1dSz_T_maK1_-YhhZ9Q%3A1783346423388&ei=97RLauufF43EkPIPj_7T6Ak&biw=1547&bih=1060&ved=0ahUKEwir986Qm76VAxUNIkQIHQ__FJ0Q4dUDCBE&uact=5&oq=attiny+counter+program+examples&gs_lp=Egxnd3Mtd2l6LXNlcnAiH2F0dGlueSBjb3VudGVyIHByb2dyYW0gZXhhbXBsZXMyCBAAGIkFGKIEMgUQABjvBTIFEAAY7wUyCBAAGIkFGKIEMgUQABjvBUi7DlDkBViUDHABeAGQAQCYAX-gAdgFqgEDMi41uAEDyAEA-AEBmAIFoAKwA8ICChAAGEcY1gQYsAPCAggQIRigARjDBJgDAIgGAZAGCJIHAzMuMqAH3hGyBwMyLjK4B6wDwgcDMS40yAcIgAgB&sclient=gws-wiz-serp
+  https://www.google.com/search?q=ATTINY+1604+examples+SPI0+configuration+registers&sca_esv=0a7bccaf8b3ce000&rlz=1C1HKFL_enUS1191US1191&biw=1535&bih=1590&sxsrf=APpeQntWz2Yrtmaw924VjbpwobaRaHAxsw%3A1783357188924&ei=BN9LaqKDONvPkPIP6920oQw&ved=0ahUKEwiilYOew76VAxXbJ0QIHesuLcQQ4dUDCBE&uact=5&oq=ATTINY+1604+examples+SPI0+configuration+registers&gs_lp=Egxnd3Mtd2l6LXNlcnAiMUFUVElOWSAxNjA0IGV4YW1wbGVzIFNQSTAgY29uZmlndXJhdGlvbiByZWdpc3RlcnMyChAhGAoYoAEYwwQyChAhGAoYoAEYwwRI5whQnAdYnAdwAXgBkAEAmAGUAaABlAGqAQMwLjG4AQPIAQD4AQGYAgKgApsBwgIKEAAYRxjWBBiwA5gDAIgGAZAGCJIHAzEuMaAHiASyBwMwLjG4B5cBwgcDMC4yyAcDgAgB&sclient=gws-wiz-serp
+  
+https://wolles-elektronikkiste.de/en/programming-the-tinyavr-series-0-1-2-part-1
+
+SPI (24.3.1 in manual)
+Initialize the SPI to a basic functional state by following these steps:
+1. Configure the SS pin in the port peripheral.
+2. Select SPI Master/Slave operation by writing the Master/Slave Select bit (MASTER) in the Control
+A register (SPIn.CTRLA).
+3. In Master mode, select the clock speed by writing the Prescaler bits (PRESC) and the Clock
+Double bit (CLK2X) in SPIn.CTRLA.
+4. Optional: Select the Data Transfer mode by writing to the MODE bits in the Control B register
+(SPIn.CTRLB).
+5. Optional: Write the Data Order bit (DORD) in SPIn.CTRLA.
+6. Optional: Setup Buffer mode by writing BUFEN and BUFWR bits in the Control B register
+(SPIn.CTRLB).
+7. Disable the multimaster support in Master mode, write '1' to the Slave Select Disable
+bit (SSD) in SPIn.CTRLB.
+8. Enable the SPI by writing a '1' to the ENABLE bit in SPIn.CTRLA.
+
+24.3.2.1.1: If SSD in SPIn.CTRLB is one, the SPI does not use the SS pin, and it can be used as a regular I/O pin, or by other peripheral modules
+
