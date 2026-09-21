@@ -22,6 +22,9 @@
 //#define BAUD_RATE 9600
 
 char print_string[256];
+char laser_power_str[10];
+char board_temp_str[10];
+
 
 static void USART0_sendChar(char c) {
   while (!(USART0.STATUS & USART_DREIF_bm)); //Wait for Data Register Empty Interrupt Flag is set
@@ -39,48 +42,49 @@ void setup() {
   // Configure RS485 
   _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB, !CLKCTRL_PEN_bm);     // clear Prescalar to run at 20 MHz (needed?)
   while (!(CLKCTRL.MCLKSTATUS & CLKCTRL_OSC20MS_bm)) {};
-  
   PORTMUX.CTRLB |= PORTMUX_USART0_bm;     // Select the alternate pin positions for USART0
-  
   PORTA.DIRSET = PIN1_bm;   // Configure TXD as output
   PORTA.DIRCLR = PIN2_bm;   // Configure RXD as input (not currently used)
   PORTA.DIRSET = PIN3_bm;   // Configure XCK as output
-
-  USART0.CTRLC = USART_CMODE_ASYNCHRONOUS_gc | 
-                 USART_PMODE_DISABLED_gc | 
-                 USART_SBMODE_1BIT_gc | 
-                 USART_CHSIZE_8BIT_gc;          // Set Frame Format: 8 data bits, 1 stop bit, no parity
-  
+  USART0.CTRLC = USART_CMODE_ASYNCHRONOUS_gc | USART_PMODE_DISABLED_gc | USART_SBMODE_1BIT_gc | USART_CHSIZE_8BIT_gc;          // Set Frame Format: 8 data bits, 1 stop bit, no parity
   USART0.BAUD = (uint16_t) (F_CPU * 64 / (16 * (float) BAUD_RATE) + 0.5);  // Configure USART Baud Rate
-  
-  //USART0.CTRLB = USART_TXEN_bm | USART_RXEN_bm;     // enable transmit and recieve
   USART0.CTRLB |= USART_TXEN_bm;                      // enable transmit only
-
   
-  // look at pin 4
-  PORTA.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc; // Disable digital buffer
-  ADC0.CTRLA = ADC_ENABLE_bm; // Enable ADC
+  // Configure AI (10 bit) on PA4 and PA7 for LSRSENSE and BOARD_TEMP
+  PORTA.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;             // Disable digital buffer, also disables the pullup
+  PORTA.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;             // Disable digital buffer, also disables the pullup
+  ADC0.CTRLA = ADC_ENABLE_bm;                             // Enable ADC
   ADC0.CTRLC = ADC_REFSEL_INTREF_gc | ADC_PRESC_DIV16_gc; // use internal reference / prescaler: 16
-  VREF.CTRLA = VREF_ADC0REFSEL_4V34_gc; // use internal 4.34 V reference 
-  ADC0.MUXPOS = ADC_MUXPOS_AIN4_gc; // use A4 as input
-  ADC0.SAMPCTRL = 0;
+  VREF.CTRLA = VREF_ADC0REFSEL_4V34_gc;                   // use internal 4.34 V reference 
+  ADC0.SAMPCTRL = 0;                                      // not sure
+  
 }
 
 void loop() {
   
-  ADC0.COMMAND = ADC_STCONV_bm; // Start Conversion
+  // Read PA4
+  ADC0.MUXPOS = ADC_MUXPOS_AIN4_gc;             // use PA4/AI4 as input
+  ADC0.COMMAND = ADC_STCONV_bm;                 // Start Conversion
   while((ADC0.INTFLAGS & ADC_RESRDY_bm) == 0){} // Waiting for the result
-  //float result = ADC0.RES * 4340.0 / 1024.0;
+  float laser_power = ADC0.RES * 4340.0 / 1024.0;  // this is mV
 
-
+  // Read PA7
+  ADC0.MUXPOS = ADC_MUXPOS_AIN7_gc;             // use PA7/AI7 as input
+  ADC0.COMMAND = ADC_STCONV_bm;                 // Start Conversion
+  while((ADC0.INTFLAGS & ADC_RESRDY_bm) == 0){} // Waiting for the result
+  float board_temp = ADC0.RES * 4340.0 / 1024.0;  // this is mV
+  board_temp = (board_temp - 500.)/10.;           // this is T in C, for MCP9700
+  board_temp = board_temp * 9./5. + 32.;          // this is T in F
   
   
-  sprintf(print_string, "Readings: %u\r\n", ADC0.RES);
+  dtostrf(laser_power, 6, 2, laser_power_str); // dtostrf(value, width, precision, output_buffer)
+  dtostrf(board_temp,  6, 2, board_temp_str); // dtostrf(value, width, precision, output_buffer)
+  sprintf(print_string, "Readings: PA4 %s, PA7 %s,\r\n", laser_power_str, board_temp_str);
   
   for (size_t i=0; i< strlen(print_string); i++) {
     USART0_sendChar(print_string[i]);
   }
-  _delay_ms(100);
+  _delay_ms(500);
   
   
 }

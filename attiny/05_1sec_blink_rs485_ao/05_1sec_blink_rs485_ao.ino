@@ -123,20 +123,26 @@ void update_outputs(){
   // Setup for SPI communication to analog digitizer
   USART0.CTRLC = USART_CMODE_MSPI_gc; 
   USART0.BAUD = 128;                            // baudrate is 1/32 of perif clock (this is hardset along with manual delays, so don't change independently)
-  PORTB.OUTCLR = PIN0_bm;                       // configure analog output digitizer to listen
-
+  
   // Update Analog Output Voltage
-  USART_sendChar(0b00010000);                  // Update DAC output immediately
-  USART_sendChar((debug_value >> 8) & 0xFF);   // upper 8 bits
-  USART_sendChar(debug_value & 0xFF);          // lower 8 bits
-  while (!(USART0.STATUS & USART_DREIF_bm));
+  PORTB.OUTCLR = PIN0_bm;                       // Configure analog output digitizer to listen
+  USART_sendChar(0b00010000);                   // Update DAC output immediately
+  USART_sendChar((debug_value >> 8) & 0xFF);    // upper 8 bits
+  USART_sendChar(debug_value & 0xFF);           // lower 8 bits
+
+  while (!(USART0.STATUS & USART_DREIF_bm));    // wait for transmission to complete
+  _delay_us(10);                                // not sure why this is needed
+  PORTB.OUTSET = PIN0_bm;                       // configure digitizer to stop listening
+  
+  _delay_us(10);                                // not sure why this is needed
   
   // Update Analog Output Current
+  PORTB.OUTCLR = PIN0_bm;                       // configure analog output digitizer to listen
   USART_sendChar(0b00100100);                  // Update DAC output immediately
   USART_sendChar((debug_value >> 8) & 0xFF);   // upper 8 bits
   USART_sendChar(debug_value & 0xFF);          // lower 8 bits
+
   while (!(USART0.STATUS & USART_DREIF_bm));
-  
   _delay_us(10);              // not sure why this is needed
   PORTB.OUTSET = PIN0_bm;     // configure digitizer to stop listening
 

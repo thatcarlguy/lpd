@@ -1,0 +1,27 @@
+
+Simulation is done with Falstad: https://www.falstad.com/circuit/
+
+Laser current range is 45 to 60 mA, so the setpoint is 55 mA
+
+Voltage drop at low temperatures for 55 mA is 5 V, and circuit needs ~1V to dissipate through transistors/resistor
+  so set laser power voltage at 6V (maybe 7V to be safe?)
+
+Use the circuit below to see performance
+<cir f="1" ts="0.000005" ic="10.634267539816555" cb="43" pb="50" vr="2" mts="5e-11">
+  <VarRail x="96 256 64 256" f="0" wf="7" fr="5" maxv="5" st="Logic Voltage"/>
+  <w x="272 304 272 336" f="1"/>
+  <w x="272 240 272 192" f="1"/>
+  <VarRail x="272 192 272 160" f="0" wf="7" fr="0.84" maxv="7" st="Drive Voltage"/>
+  <g x="272 400 272 416" f="0"/>
+  <t x="224 256 272 256" f="0" pn="1" be="100" mo="default" vbe="0.4828035944061385" vbc="0.6975779081774618"/>
+  <w x="160 256 224 256" f="1"/>
+  <t x="272 304 224 304" f="0" pn="1" be="100" mo="default" vbe="-0.6975779081774618" vbc="0.6252256862286767"/>
+  <w x="224 256 224 288" f="0"/>
+  <w x="272 272 272 304" f="0"/>
+  <r x="272 336 272 400" f="0" r="12"/>
+  <w x="224 320 224 400" f="0"/>
+  <w x="224 400 272 400" f="0"/>
+  <r x="96 256 160 256" f="0" r="1000"/>
+</cir>
+
+

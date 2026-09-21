@@ -29,7 +29,7 @@ void loop() {
 
   PORTB.DIRCLR = PIN3_bm;   // set to high impediance, doesn't really show well though (dim both lights)
   delay(500);
-  PORTB.DIRSET = PIN3_bm;     // set PB3 to OUTPUT for Status LED
+  PORTB.DIRSET = PIN3_bm;   // set PB3 to OUTPUT for Status LED
 
 }
 
