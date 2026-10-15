@@ -45,6 +45,7 @@ default_filename_base = r'data_20260427'
 default_filename_tail = '_run{run:05d}.csv'
 default_runnumber = 1
 default_runduration = 1
+default_feedduration = 10
 default_samplerate = 5          # kHz for PD only
 
 default_ai_channel = 'ai0'
@@ -81,22 +82,21 @@ class GUI(QtWidgets.QDialog):
         self.sb_runnumber.setValue(default_runnumber)
         self.sb_runduration.setValue(default_runduration)
         self.sb_samplerate.setValue(default_samplerate)
+        self.sb_feedduration.setValue(default_feedduration)
         
         # actions
         self.pb_takedata.clicked.connect(self.takeData)
         self.sb_runduration.valueChanged.connect(self.update_daq)
         self.sb_samplerate.valueChanged.connect(self.update_daq)
-        self.pb_particle_low.clicked.connect( lambda : self.setParticleFeed(1))
-        self.pb_particle_med.clicked.connect( lambda : self.setParticleFeed(2))
-        self.pb_particle_high.clicked.connect(lambda : self.setParticleFeed(3))
+        self.pb_particle_low.clicked.connect( lambda : self.setTimedParticleFeed(1))
+        self.pb_particle_med.clicked.connect( lambda : self.setTimedParticleFeed(2))
+        self.pb_particle_high.clicked.connect(lambda : self.setTimedParticleFeed(3))
+        self.pb_particle_off.clicked.connect( self.stopTimedFeeder)
         self.feed_speed = 'Off'
         
         # setup DAQ
         self.daq = DAQ()
         self.update_daq()
-        
-        # turn off particle feeder signals
-        self.setParticleFeed(0)
         
         # top plot
         self.pw_plot1.setBackground(None)
@@ -111,10 +111,17 @@ class GUI(QtWidgets.QDialog):
         self.timer.timeout.connect(self.update_gui)
         self.timer.start()
         
+        # timer to run feeder for specified run time
+        self.ftimer = QtCore.QTimer()
+        self.ftimer.setInterval(default_feedduration*1000)      # msec
+        self.ftimer.timeout.connect(self.stopTimedFeeder)
+        self.ftimer.setSingleShot(True)
+        
 
         
     def __del__(self):
         del(self.timer)
+        del(self.ftimer)
         del(self.daq)
         pass
     
@@ -198,16 +205,24 @@ class GUI(QtWidgets.QDialog):
     
     
     
-    def setParticleFeed(self,speed):
-        # 0 is off, 1 is slow, 2 is medium, 3 is high
-        #
-        if speed==0:
-            if self.pb_particle_low.isChecked():
-                self.pb_particle_low.setChecked(False)
-            if self.pb_particle_med.isChecked():
-                self.pb_particle_med.setChecked(False)
-            if self.pb_particle_high.isChecked():
-                self.pb_particle_high.setChecked(False)
+    def stopTimedFeeder(self):
+        self.daq.write_do_array(channels=default_do_channels,values=[False,False,False,False])
+        self.feed_speed = "Off"
+        info(f'Setting particle distribution speed to {self.feed_speed}')
+        
+        if self.ftimer.isActive():
+            self.ftimer.stop()
+        
+        if self.pb_particle_low.isChecked():
+            self.pb_particle_low.setChecked(False)
+        if self.pb_particle_med.isChecked():
+            self.pb_particle_med.setChecked(False)
+        if self.pb_particle_high.isChecked():
+            self.pb_particle_high.setChecked(False)
+        
+
+    def setTimedParticleFeed(self,speed):
+        # 1 is slow, 2 is medium, 3 is high
         if speed==1:
             if self.pb_particle_med.isChecked():
                 self.pb_particle_med.setChecked(False)
@@ -230,15 +245,15 @@ class GUI(QtWidgets.QDialog):
         elif self.pb_particle_med.isChecked():
             self.feed_speed = "Medium"
             self.daq.write_do_array(channels=default_do_channels,values=[True,False,True,False])
-        elif self.pb_particle_high.isChecked():
+        else: # self.pb_particle_high.isChecked():
             self.feed_speed = "High"
             self.daq.write_do_array(channels=default_do_channels,values=[True,False,False,True])
-        else:
-            self.feed_speed = "Off"
-            self.daq.write_do_array(channels=default_do_channels,values=[False,False,False,False])
         
-        info(f'Setting particle distribution speed to: {self.feed_speed}')
-        
+        self.ftimer.setInterval(self.sb_feedduration.value()*1000)      # msec
+        info(f'Setting particle distribution speed to {self.feed_speed} for {self.sb_runduration.value()} seconds')
+        self.ftimer.start()
+
+
 
 
 

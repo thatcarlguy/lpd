@@ -36,7 +36,7 @@ import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s - %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
 from logging import info
 
-default_runduration = 10
+default_feedduration = 10
 
 default_do_channels = ['port0/line0','port0/line1','port0/line2','port0/line3']
 
@@ -53,7 +53,7 @@ class GUI(QtWidgets.QDialog):
         self.setWindowTitle('Particulate Feeder GUI')
         
         # run number, duration, acq speed
-        self.sb_runduration.setValue(default_runduration)
+        self.sb_feedduration.setValue(default_feedduration)
         
         # actions
         self.pb_particle_low.clicked.connect( lambda : self.setTimedParticleFeed(1))
@@ -66,14 +66,14 @@ class GUI(QtWidgets.QDialog):
         self.daq = DAQ()
         
         # timer to run feeder for specified run time
-        self.timer = QtCore.QTimer()
-        self.timer.setInterval(default_runduration*1000)      # msec
-        self.timer.timeout.connect(self.stopTimedFeeder)
-        self.timer.setSingleShot(True)
+        self.ftimer = QtCore.QTimer()
+        self.ftimer.setInterval(default_feedduration*1000)      # msec
+        self.ftimer.timeout.connect(self.stopTimedFeeder)
+        self.ftimer.setSingleShot(True)
         
 
     def __del__(self):
-        del(self.timer)
+        del(self.ftimer)
         del(self.daq)
         pass
 
@@ -82,8 +82,8 @@ class GUI(QtWidgets.QDialog):
         self.feed_speed = "Off"
         info(f'Setting particle distribution speed to {self.feed_speed}')
         
-        if self.timer.isActive():
-            self.timer.stop()
+        if self.ftimer.isActive():
+            self.ftimer.stop()
         
         if self.pb_particle_low.isChecked():
             self.pb_particle_low.setChecked(False)
@@ -121,9 +121,9 @@ class GUI(QtWidgets.QDialog):
             self.feed_speed = "High"
             self.daq.write_do_array(channels=default_do_channels,values=[True,False,False,True])
         
-        self.timer.setInterval(self.sb_runduration.value()*1000)      # msec
+        self.ftimer.setInterval(self.sb_feedduration.value()*1000)      # msec
         info(f'Setting particle distribution speed to {self.feed_speed} for {self.sb_runduration.value()} seconds')
-        self.timer.start()
+        self.ftimer.start()
 
 
 

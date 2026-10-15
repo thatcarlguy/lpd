@@ -88,7 +88,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Run Duration</string>
+     <string>Feed Duration</string>
     </property>
    </widget>
    <widget class="QLabel" name="label_5">
@@ -104,7 +104,7 @@
      <string>sec</string>
     </property>
    </widget>
-   <widget class="QSpinBox" name="sb_runduration">
+   <widget class="QSpinBox" name="sb_feedduration">
     <property name="geometry">
      <rect>
       <x>160</x>
