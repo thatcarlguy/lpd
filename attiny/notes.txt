@@ -5,7 +5,7 @@ Pinout:
   PA2 - SPI/MISO    RS485 output, Analog output control
   PA3 - SPI/SCK     RS485 output, Analog output control
   PA4 - AIN6        Analog input for laser PD feedback
-  PA5 - TCB0        PWM output to control TEC
+  PA5 - TCB0        PWM output to control TEC                (https://wolles-elektronikkiste.de/en/tinyavr-series-part-2-timer-a-b-ccl-slpctrl#timer_b)
   PA6 - DOUT        Digital output for laser on/off control
   PA7 - AIN7        Analog input for board temperature
   PB0 - TCA0        Counter

@@ -18,7 +18,9 @@ To troubleshoot and look at the different channel names/configuration options, u
 """
 from nidaqmx.system import System
 from nidaqmx import Task, constants
+from nidaqmx.stream_writers import CounterWriter
 from random import random
+#import numpy as np
 
 import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s - %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
@@ -26,19 +28,19 @@ from logging import info, error
 
 
 class DAQ():
-    def __init__(self,daq_type='USB-6221'):
+    def __init__(self,daq_type='USB-6361'):
         self.device = None
         
+        # AI 
         self.channels_ai = None
         self.task_ai = None
         
-        self.channel_pwm = None
-        self.task_pwm = None
-        self.counter_pwm = None
+        # DO
+        self.channel_do = None
+        self.task_do = None
         
         # not done yet
         self.channels_di = None
-        self.channels_do = None
         self.channel_counter = None
         self.channels_ao = None
         
@@ -64,7 +66,7 @@ class DAQ():
     ###
     ###########################################################################
     ###########################################################################
-    def start_ai(self,channels=['ai0' ,'ai1'],samplerate=1000,min_val=-5.0,max_val=5.0):
+    def start_ai(self,task=0,channels=['ai0' ,'ai1'],samplerate=1000,min_val=-5.0,max_val=5.0):
         # Start data acquisition on the supplied analog channels, with the same samplerate and voltage range for all channels
         #  samplerate - Hz
         # min_val/max_val - Volts
@@ -84,11 +86,11 @@ class DAQ():
             self.task_ai = Task()
             for channel in channels:
                 self.task_ai.ai_channels.add_ai_voltage_chan(f'{self.device}/{channel}',
-                                                             terminal_config=constants.TerminalConfiguration.DIFF,
-                                                             min_val=min_val, max_val=max_val)
+                                                                terminal_config=constants.TerminalConfiguration.DIFF,
+                                                                min_val=min_val, max_val=max_val)
             
             self.task_ai.timing.cfg_samp_clk_timing(float(samplerate), 
-                                                    sample_mode=constants.AcquisitionType.CONTINUOUS)
+                                                       sample_mode=constants.AcquisitionType.CONTINUOUS)
             self.task_ai.start()
     
     def read_ai(self,number_of_samples_per_channel=100):
@@ -106,6 +108,7 @@ class DAQ():
             finally:
                 self.task_ai = None
     
+    
     ###########################################################################
     ###########################################################################
     ###
@@ -113,41 +116,7 @@ class DAQ():
     ###
     ###########################################################################
     ###########################################################################
-    def start_pwm(self,speed=50,channel='PFI8',pwm_min=1.5/20.,pwm_max=1.2/20.,):
-        #
-        # speed - int or float, percent max speed (range 0 to 100)
-        #
-        if self.device is not None:
-            # turn off pwm if currently running
-            if self.task_pwm is not None:
-                try:
-                    self.task_pwm.stop()
-                except:
-                    pass
-                finally:
-                    self.task_pwm = None
-            
-            # initialize and start pwm signal
-            self.channel_pwm = channel
-            self.task_pwm = Task()
-            self.counter_pwm = self.task_pwm.co_channels.add_co_pulse_chan_freq(f'{self.device}/ctr0',
-                                                                                idle_state=constants.Level.LOW,
-                                                                                initial_delay=0.0,
-                                                                                freq=50.0,
-                                                                                duty_cycle=pwm_min + (pwm_max-pwm_min)*speed/100.)
-            self.counter_pwm.co_pulse_term = f'/{self.device}/{channel}'
-            self.task_pwm.timing.cfg_implicit_timing(sample_mode=constants.AcquisitionType.CONTINUOUS)
-            self.task_pwm.start()
-
-    def stop_pwm(self):
-        if self.task_pwm is not None:
-            try:
-                self.task_pwm.stop()
-            except:
-                pass
-            finally:
-                self.task_pwm = None
-                
+    
     
     ###########################################################################
     ###########################################################################
@@ -172,6 +141,34 @@ class DAQ():
     ###
     ###########################################################################
     ###########################################################################
+    def write_do_single(self,channel='port0/line0',value=True):
+        if self.device is not None:
+            
+            if self.task_do is not None:                    # not really implemented or checked
+                self.task_do.stop()
+            
+            self.channels_do = f'{self.device}/{channel}'
+            self.task_do = Task()
+            self.task_do.do_channels.add_do_chan(self.channels_do,
+                                                     line_grouping=constants.LineGrouping.CHAN_PER_LINE)
+            self.task_do.start()
+            self.task_do.write(value)
+            self.task_do.stop()
+    
+    def write_do_array(self,channels=['port0/line0','port0/line1','port0/line2','port0/line3'],values=[False,False,False,False]):
+        if self.device is not None:
+            
+            if self.task_do is not None:                    # not really implemented or checked
+                self.task_do.stop()
+            
+            self.channels_do = [f'{self.device}/{channel}' for channel in channels]
+            self.task_do = Task()
+            for channel in self.channels_do:
+                self.task_do.do_channels.add_do_chan(channel,
+                                                     line_grouping=constants.LineGrouping.CHAN_PER_LINE)
+            self.task_do.start()
+            self.task_do.write(values)
+            self.task_do.stop()
     
     ###########################################################################
     ###########################################################################
@@ -182,4 +179,11 @@ class DAQ():
     ###########################################################################
     
 
+if __name__=='__main__':
+    # print all devices found under system
     
+    system = System.local()
+    device = None
+    for ni_device in system.devices:
+        print(f'Found {ni_device.product_type} as "{ni_device.name}"')
+

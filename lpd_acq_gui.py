@@ -29,55 +29,34 @@ from PyQt5.QtWidgets import QFileDialog, QErrorMessage
 from PyQt5.uic import loadUi
 import sys
 import os
-
+from datetime import datetime
 
 from ni_daq import DAQ
+
+
 import numpy as np
 
 import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s - %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
 from logging import info, error
 
-
-
 default_filepath = r'C:\Users\carla\Documents'
-default_filename_base = r'data_20260203'
+default_filename_base = r'data_20260427'
 default_filename_tail = '_run{run:05d}.csv'
 default_runnumber = 1
-default_runduration = 4
-default_samplerate = 1
-default_aichannels = ['ai1',    # photodiode
-                      'ai2',    # laser feedback
-                      'ai4',    # pitot tube
-                      'ai5']    # tc reader
+default_runduration = 1
+default_samplerate = 5          # kHz for PD only
 
-default_displayupdaterate = 20      # Hz
+default_ai_channel = 'ai0'
+default_do_channels = ['port0/line0','port0/line1','port0/line2','port0/line3']
+default_displayupdaterate = 10      # Hz
 
-default_particlefeed_low = 10
-default_particlefeed_high = 100
 
 
 # instrument calibrations
 def volts_to_engineering_units_1(data):
     # photodiode
-    return np.asarray(data)*1.000
-def volts_to_engineering_units_2(data):
-    # laser feedback diode
-    return np.asarray(data)*1.00
-def volts_to_engineering_units_3(data):
-    # pitot tube
-    return np.asarray(data)*1.00
-def volts_to_engineering_units_4(data):
-    # tc reader
-    return np.asarray(data)*10.00
-
-def calc_fps(dp_torr, T_C, pinf_torr):
-    # torr*133.322368 = Pa
-    # m/s*3.2808399 = ft/s
-    rho_kgm3 = (pinf_torr*133.322368)*0.289652/8.3144626/(T_C+273.15)
-    vel_ms = np.sqrt(2*dp_torr*133.322368/rho_kgm3)
-    return vel_ms*3.2808399
-
+    return np.asarray(data)*1000.00
 
 class GUI(QtWidgets.QDialog):
     def __init__(self, *args, **kwargs):
@@ -107,33 +86,31 @@ class GUI(QtWidgets.QDialog):
         self.pb_takedata.clicked.connect(self.takeData)
         self.sb_runduration.valueChanged.connect(self.update_daq)
         self.sb_samplerate.valueChanged.connect(self.update_daq)
-        self.pb_particle_low.clicked.connect(lambda : self.setParticleFeed(default_particlefeed_low))
-        self.pb_particle_high.clicked.connect(lambda : self.setParticleFeed(default_particlefeed_high))
-        
+        self.pb_particle_low.clicked.connect( lambda : self.setParticleFeed(1))
+        self.pb_particle_med.clicked.connect( lambda : self.setParticleFeed(2))
+        self.pb_particle_high.clicked.connect(lambda : self.setParticleFeed(3))
+        self.feed_speed = 'Off'
         
         # setup DAQ
         self.daq = DAQ()
         self.update_daq()
         
+        # turn off particle feeder signals
+        self.setParticleFeed(0)
+        
         # top plot
         self.pw_plot1.setBackground(None)
-        self.pw_plot1.setLabel("left", "Photodiode Signam (V)", color="k", size="12pt")
+        self.pw_plot1.setLabel("left", "Photodiode Signal (mV)", color="k", size="12pt")
         self.pw_plot1.setLabel("bottom", "Time (sec)",     color="k", size="12pt")
         self.pw_plot1.showGrid(x=True, y=True)
         self.pw_line1 = self.pw_plot1.plot(self.time, self.data1_eng, pen='b')
-        
-        # bottom plot
-        self.pw_plot2.setBackground(None)
-        self.pw_plot2.setLabel("left", "Laser Power (V)", color="k", size="12pt")
-        self.pw_plot2.setLabel("bottom", "Time (sec)",     color="k", size="12pt")
-        self.pw_plot2.showGrid(x=True, y=True)
-        self.pw_line2 = self.pw_plot2.plot(self.time, self.data2_eng, pen='b')
         
         # timer to poll DAQ for new measurements
         self.timer = QtCore.QTimer()
         self.timer.setInterval(50)                                                                                  # msec change this
         self.timer.timeout.connect(self.update_gui)
         self.timer.start()
+        
 
         
     def __del__(self):
@@ -145,46 +122,28 @@ class GUI(QtWidgets.QDialog):
         self.daq.stop_ai()
         
         # update the display vectors to match datacollection settings
-        self.time = np.arange(self.sb_runduration.value()*self.sb_samplerate.value())/self.sb_samplerate.value()
+        self.time = np.arange(self.sb_runduration.value()*self.sb_samplerate.value()*1000)/(self.sb_samplerate.value()*1000)
         self.data1_eng = np.zeros_like(self.time,dtype=float)
-        self.data2_eng = np.zeros_like(self.time,dtype=float)
         
         # store this one since it gets called on every plot update
-        self.__displayupdatesamples = int(self.sb_runduration.value()*self.sb_samplerate.value()/default_displayupdaterate)
+        self.__hsdisplayupdatesamples = int(self.sb_runduration.value()*(self.sb_samplerate.value()*1000)/default_displayupdaterate)
         
-        self.daq.start_ai(channels=default_aichannels,
-                          samplerate=self.sb_samplerate.value(),
+        self.daq.start_ai(channels=[default_ai_channel],
+                          samplerate=self.sb_samplerate.value()*1000,
                           min_val=-5.0, max_val=5.0)
-    
+        
     def update_gui(self):
-        data1_raw, data2_raw, data3_raw, data4_raw = self.daq.read_ai(self.__displayupdatesamples)
+        data1_raw = self.daq.read_ai(self.__hsdisplayupdatesamples)
         
         # shift data
-        self.data1_eng[0:-self.__displayupdatesamples] = self.data1_eng[self.__displayupdatesamples::]
-        self.data2_eng[0:-self.__displayupdatesamples] = self.data2_eng[self.__displayupdatesamples::]
-        self.data3_eng[0:-self.__displayupdatesamples] = self.data3_eng[self.__displayupdatesamples::]
-        self.data4_eng[0:-self.__displayupdatesamples] = self.data4_eng[self.__displayupdatesamples::]
+        self.data1_eng[0:-self.__hsdisplayupdatesamples] = self.data1_eng[self.__hsdisplayupdatesamples::]
         
         # convert to engineering units and put in the end of the plotting vector
-        self.data1_eng[-self.__displayupdatesamples::] = volts_to_engineering_units_1(data1_raw)
-        self.data2_eng[-self.__displayupdatesamples::] = volts_to_engineering_units_2(data2_raw)
-        self.data3_eng[-self.__displayupdatesamples::] = volts_to_engineering_units_3(data3_raw)
-        self.data4_eng[-self.__displayupdatesamples::] = volts_to_engineering_units_4(data4_raw)
+        self.data1_eng[-self.__hsdisplayupdatesamples::] = volts_to_engineering_units_1(data1_raw)
         
         self.pw_line1.setData(self.time, self.data1_eng)
-        self.pw_line2.setData(self.time, self.data2_eng)
-        self.pw_line3.setData(self.time, self.data3_eng)
-        self.pw_line4.setData(self.time, self.data4_eng)
         
-        delta_pressure = self.data3_eng.mean()
-        temperature = self.data4_eng.mean()
-        windspeed = torr_to_fps(delta_pressure, temperature)
-        self.lcd_windspeed.display(f'{windspeed():.1f}')
-        self.lcd_temp.display(f'{temperature:.1f}')
         
-        if(self.pb_printchannelaverages.isChecked()):
-            info(f'1: {self.data1_eng.mean():6.4f} V    2: {self.data2_eng.mean():6.4f} VC    3: {self.data3_eng.mean():6.4f} torr    4: {self.data4_eng.mean():6.4f} deg C')
-    
     def selectFilePath(self):
         filepath = QFileDialog.getExistingDirectory(self,
                                                     'Open Directory',
@@ -215,17 +174,22 @@ class GUI(QtWidgets.QDialog):
             error_dialog.showMessage(f'File {filename} exists. Data acquisition aborted.')
         else:
             np.savetxt(filename,
-                       np.vstack((self.time,self.data1_eng,self.data2_eng)).T,
+                       np.vstack((self.time,self.data1_eng)).T,
                        fmt='%10.4f',
                        delimiter=',',
-                       header='Time [s], Delta Pressure [torr], Temperature [C]',
+                       header=(f'{datetime.now().strftime("%Y%m%d %H:%M:%S")}\n'
+                               f'Run {self.sb_runnumber.value()}\n'
+                               f'Acquisition Duration: {self.sb_runduration.value()} sec\n'
+                               f'Sample Rate: {self.sb_samplerate.value()} kHz\n'
+                               '\n'
+                               f'Particle Feeder Speed: {self.feed_speed}\n'
+                               '\n'
+                               'Time [s], Photodiode [mV]'),
                        comments='')
             
             # when sucessfull 
             self.sb_runnumber.setValue(run+1)
             info(f'Acquired {duration} sec of data to {filename}')
-
-
     
     
     
@@ -235,36 +199,47 @@ class GUI(QtWidgets.QDialog):
     
     
     def setParticleFeed(self,speed):
-        if speed==default_particlefeed_low:
+        # 0 is off, 1 is slow, 2 is medium, 3 is high
+        #
+        if speed==0:
             if self.pb_particle_low.isChecked():
-                self.pb_particle_high.setChecked(False)
-        else: # speed==default_particlefeed_high
-            if self.pb_particle_high.isChecked():
                 self.pb_particle_low.setChecked(False)
+            if self.pb_particle_med.isChecked():
+                self.pb_particle_med.setChecked(False)
+            if self.pb_particle_high.isChecked():
+                self.pb_particle_high.setChecked(False)
+        if speed==1:
+            if self.pb_particle_med.isChecked():
+                self.pb_particle_med.setChecked(False)
+            if self.pb_particle_high.isChecked():
+                self.pb_particle_high.setChecked(False)
+        elif speed==2:
+            if self.pb_particle_low.isChecked():
+                self.pb_particle_low.setChecked(False)
+            if self.pb_particle_high.isChecked():
+                self.pb_particle_high.setChecked(False)
+        else: # speed==3
+            if self.pb_particle_low.isChecked():
+                self.pb_particle_low.setChecked(False)
+            if self.pb_particle_med.isChecked():
+                self.pb_particle_med.setChecked(False)
         
         if self.pb_particle_low.isChecked():
-            print('low')
+            self.feed_speed = "Low"
+            self.daq.write_do_array(channels=default_do_channels,values=[True,True,False,False])
+        elif self.pb_particle_med.isChecked():
+            self.feed_speed = "Medium"
+            self.daq.write_do_array(channels=default_do_channels,values=[True,False,True,False])
         elif self.pb_particle_high.isChecked():
-            print('high')
+            self.feed_speed = "High"
+            self.daq.write_do_array(channels=default_do_channels,values=[True,False,False,True])
         else:
-            print('off')
+            self.feed_speed = "Off"
+            self.daq.write_do_array(channels=default_do_channels,values=[False,False,False,False])
         
+        info(f'Setting particle distribution speed to: {self.feed_speed}')
         
-        
-        
-        
-        
-    def update_conditions(self):
-        # get the values for windspeed and temperature
-        
-        windspeed_knot = 20.123
-        temp_F = 65.123
-        
-        self.lcd_windspeed.display(f'{windspeed_knot:.1f}')
-        self.lcd_temp.display(f'{temp_F:.1f}')
-        
-        
-        
+
 
 
 
